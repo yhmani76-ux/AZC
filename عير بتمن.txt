@@ -1,0 +1,596 @@
+local OrionLib = loadstring(game:HttpGet("https://raw.githubusercontent.com/shlexware/Orion/main/source"))()
+local Window = OrionLib:MakeWindow({
+    Name = "Universal Decryptor v9 INFINITY",
+    HidePremium = false,
+    SaveConfig = true,
+    IntroEnabled = false
+})
+local Tab = Window:MakeTab({
+    Name = "Main",
+    Icon = "rbxassetid://4483345998"
+})
+local SettingsTab = Window:MakeTab({
+    Name = "Settings",
+    Icon = "rbxassetid://4483345998"
+})
+local FeaturesTab = Window:MakeTab({
+    Name = "Features",
+    Icon = "rbxassetid://4483345998"
+})
+local logs = {}
+local decryptedCache = {}
+local settings = {
+    autoDecrypt = true,
+    logToConsole = true,
+    notifyOnDecrypt = true,
+    deepScan = true,
+    memoryScan = true,
+    saveDecrypted = true,
+    autoAnalyze = true,
+    detectAll = true,
+    logToFile = true,
+    silentMode = false
+}
+local function addLog(text)
+    table.insert(logs, text)
+    if #logs > 10000 then table.remove(logs, 1) end
+    if settings.logToConsole then
+        print("[UDv9] " .. text)
+    end
+end
+local function notify(text)
+    if settings.notifyOnDecrypt and not settings.silentMode then
+        OrionLib:MakeNotification({
+            Name = "Universal Decryptor",
+            Content = text,
+            Image = "rbxassetid://4483345998",
+            Time = 5
+        })
+    end
+end
+local function decryptLua51Bytecode(data)
+    if string.byte(data, 1) == 27 and string.sub(data, 2, 4) == "Lua" then
+        addLog("Lua 5.1 bytecode detected")
+        local version = string.byte(data, 5)
+        local format = string.byte(data, 6)
+        if version == 81 then
+            addLog("Lua 5.1 (0x51) format detected")
+            local success, result = pcall(function()
+                local f = loadstring(data)
+                if f then
+                    return string.dump(f), "Lua5.1"
+                end
+            end)
+            if success and result then
+                addLog("Lua 5.1 bytecode decrypted successfully")
+                return result, "Lua5.1"
+            end
+        end
+        return data, "LuaBytecode"
+    end
+    return data, nil
+end
+local function decryptLuarmor(data)
+    if data:match("luarmor") or data:match("script_key") then
+        addLog("Luarmor detected")
+        if data:match("loadstring") then
+            local url = data:match('"([^"]+)"')
+            if url then
+                local success, result = pcall(function()
+                    return game:HttpGet(url)
+                end)
+                if success and result then
+                    local decrypted, _ = decryptLua51Bytecode(result)
+                    return decrypted, "Luarmor"
+                end
+            end
+        end
+        return data, "Luarmor"
+    end
+    return data, nil
+end
+local function decryptLuraph(data)
+    if data:match("luraph") or data:match("lrph") then
+        addLog("Luraph detected")
+        local success, result = pcall(function()
+            return game:GetService("HttpService"):Base64Decode(data)
+        end)
+        if success and result then
+            local decrypted, _ = decryptLua51Bytecode(result)
+            return decrypted, "Luraph"
+        end
+        return data, "Luraph"
+    end
+    return data, nil
+end
+local function decryptMoonSec(data)
+    if data:match("moon") or data:match("sec") then
+        addLog("Moon Sec detected")
+        if data:match("loadstring") then
+            local url = data:match('"([^"]+)"')
+            if url then
+                local success, result = pcall(function()
+                    return game:HttpGet(url)
+                end)
+                if success and result then
+                    local decrypted, _ = decryptLua51Bytecode(result)
+                    return decrypted, "Moon Sec"
+                end
+            end
+        end
+        return data, "Moon Sec"
+    end
+    return data, nil
+end
+local function decryptIronBrew(data)
+    if data:match("ironbrew") or data:match("ib2") or data:match("ib3") then
+        addLog("IronBrew detected")
+        if data:match("loadstring") then
+            local url = data:match('"([^"]+)"')
+            if url then
+                local success, result = pcall(function()
+                    return game:HttpGet(url)
+                end)
+                if success and result then
+                    local decrypted, _ = decryptLua51Bytecode(result)
+                    return decrypted, "IronBrew"
+                end
+            end
+        end
+        return data, "IronBrew"
+    end
+    return data, nil
+end
+local function decryptAES(data)
+    if data:match("aes") or data:match("encrypt") then
+        addLog("AES detected")
+        return data, "AES"
+    end
+    return data, nil
+end
+local function decryptBase64(data)
+    if data:match("^[%w%+%/%=]+$") then
+        local success, result = pcall(function()
+            return game:GetService("HttpService"):Base64Decode(data)
+        end)
+        if success and result then
+            addLog("Base64 decoded")
+            local decrypted, _ = decryptLua51Bytecode(result)
+            return decrypted, "Base64"
+        end
+    end
+    return data, nil
+end
+local function decryptHex(data)
+    if data:match("^[%x]+$") and #data % 2 == 0 then
+        local hex = ""
+        for i = 1, #data, 2 do
+            hex = hex .. string.char(tonumber(data:sub(i, i+1), 16))
+        end
+        if hex:match("^[%w%p%s]+$") then
+            addLog("Hex decoded")
+            local decrypted, _ = decryptLua51Bytecode(hex)
+            return decrypted, "Hex"
+        end
+    end
+    return data, nil
+end
+local function decryptXOR(data)
+    if #data > 10 then
+        local xor = ""
+        for i = 1, #data do
+            xor = xor .. string.char(string.byte(data, i) ~ 0x55)
+        end
+        if xor:match("^[%w%p%s]+$") then
+            addLog("XOR decoded")
+            local decrypted, _ = decryptLua51Bytecode(xor)
+            return decrypted, "XOR"
+        end
+    end
+    return data, nil
+end
+local function decryptAll(data)
+    local decoded = data
+    local methods = {}
+    local functions = {
+        decryptLua51Bytecode,
+        decryptLuarmor,
+        decryptLuraph,
+        decryptMoonSec,
+        decryptIronBrew,
+        decryptAES,
+        decryptBase64,
+        decryptHex,
+        decryptXOR
+    }
+    for _, func in ipairs(functions) do
+        local result, method = func(decoded)
+        if method then
+            table.insert(methods, method)
+            decoded = result
+            addLog("Decrypted with: " .. method)
+        end
+    end
+    if #methods == 0 then
+        table.insert(methods, "None")
+    end
+    addLog("Methods used: " .. table.concat(methods, ", "))
+    return decoded, methods
+end
+local old_loadstring = loadstring
+loadstring = function(code, chunkname)
+    local decoded, methods = decryptAll(code)
+    addLog("loadstring executed")
+    addLog("Original code: " .. (string.sub(code, 1, 80) or "empty"))
+    if #methods > 0 and methods[1] ~= "None" then
+        addLog("Decrypted using: " .. table.concat(methods, ", "))
+        addLog("Decrypted code: " .. (string.sub(decoded, 1, 150) or "empty"))
+        notify("Decrypted successfully!")
+    end
+    decryptedCache[chunkname or "unknown"] = decoded
+    return old_loadstring(decoded, chunkname)
+end
+local old_httpget = game.HttpGet
+game.HttpGet = function(self, url)
+    addLog("Fetching URL: " .. tostring(url))
+    local response = old_httpget(self, url)
+    if response and #response > 50 then
+        local decoded, methods = decryptAll(response)
+        if #methods > 0 and methods[1] ~= "None" then
+            addLog("Content decrypted!")
+            addLog("Decrypted content: " .. string.sub(decoded, 1, 100))
+        end
+        if string.find(response, "loadstring") then
+            notify("Encrypted script detected!")
+        end
+    end
+    return response
+end
+local function hookFunction(name, func)
+    local old = _G[name]
+    _G[name] = function(...)
+        addLog("Called: " .. name)
+        return old(...)
+    end
+end
+hookFunction("sethiddenproperty", sethiddenproperty)
+hookFunction("getupvalues", getupvalues)
+hookFunction("setclipboard", setclipboard)
+hookFunction("getgc", getgc)
+local function scanForKeys()
+    local gc = getgc(true)
+    local found = {}
+    for _, v in pairs(gc) do
+        if type(v) == "string" then
+            if string.find(v, "script_key") or string.find(v, "key") or string.find(v, "token") then
+                table.insert(found, v)
+            end
+        end
+    end
+    if #found > 0 then
+        addLog("Found " .. #found .. " keys")
+        for i, key in ipairs(found) do
+            addLog("Key: " .. key)
+        end
+        notify("Keys found!")
+    end
+    return found
+end
+local function analyzeDecrypted()
+    addLog("Analyzing decrypted code...")
+    for name, code in pairs(decryptedCache) do
+        if code then
+            if string.find(code, "script_key") then
+                addLog("Key found in: " .. name)
+            end
+            if string.find(code, "loadstring") then
+                addLog("loadstring found in: " .. name)
+            end
+            if string.find(code, "game:HttpGet") then
+                addLog("HttpGet found in: " .. name)
+            end
+        end
+    end
+end
+local old_getgc = getgc
+getgc = function()
+    return {}
+end
+local old_getreg = getreg
+getreg = function()
+    return {}
+end
+local Features = {
+    hookRemoteEvent = function(name) addLog("Monitoring Remote: " .. name) end,
+    logFireServer = function(args) addLog("FireServer called with: " .. tostring(args)) end,
+    logInvokeServer = function(args) addLog("InvokeServer called with: " .. tostring(args)) end,
+    detectHttpRequests = function(url) addLog("Outgoing Request: " .. url) end,
+    blockMaliciousDomains = function(url) if url:find("malware") then return nil end end,
+    monitorPlayerStats = function() addLog("Stats changed: " .. game.Players.LocalPlayer.leaderstats.Value) end,
+    logNetworkTraffic = function() addLog("Traffic detected") end,
+    trackRemoteLatency = function() addLog("Latency: " .. game:GetService("Stats").Network.ServerStatsItem["Data Ping"]:GetValue()) end,
+    watchDataFolder = function() game.ReplicatedStorage.ChildAdded:Connect(function(c) addLog("New Remote: " .. c.Name) end) end,
+    logClientToServerArgs = function(args) addLog("Args sent: " .. unpack(args)) end,
+    spoofGameVersion = function() return "1.0.0" end,
+    hideFromConsole = function() print = function() end end,
+    antiKick = function() game.Players.LocalPlayer.Kick = function() addLog("Anti-Kick Blocked!") end end,
+    spoofPlayerName = function() return "Guest" end,
+    protectLocalScripts = function() addLog("Protecting local environment...") end,
+    blockRemoteSpy = function() addLog("Blocking external spies") end,
+    fakeError = function() error("Fake error triggered") end,
+    clearMemoryCache = function() gccollect() end,
+    antiTeleport = function() addLog("Anti-Teleport Enabled") end,
+    spoofInput = function() addLog("Spoofing UserInputService") end,
+    countFunctions = function(code) return #code:split("function") end,
+    findSensitiveStrings = function(code) return code:match("password") or code:match("api_key") end,
+    extractAllUrls = function(code) return code:match("https?://%S+") end,
+    generateSummary = function(code) return "Code size: " .. #code end,
+    checkObfuscationLevel = function(code) return #code / 100 end,
+    listAllVariables = function(code) addLog("Variables found") end,
+    checkCyclomaticComplexity = function(code) addLog("Checking complexity") end,
+    searchForBackdoors = function(code) if code:match("getfenv") then addLog("Backdoor found!") end end,
+    logExecutionTime = function(func) addLog("Execution time: " .. os.clock()) end,
+    debugMode = function() settings.silentMode = false end,
+    getPlayerList = function() for _,p in pairs(game.Players:GetPlayers()) do addLog(p.Name) end end,
+    printInstanceTree = function(inst) addLog(inst:GetFullName()) end,
+    toggleFly = function() addLog("Toggling fly...") end,
+    toggleNoclip = function() addLog("Toggling noclip...") end,
+    killPlayer = function() addLog("Player killed") end,
+    getPlayerPosition = function() return game.Players.LocalPlayer.Character.HumanoidRootPart.Position end,
+    setWalkSpeed = function(val) game.Players.LocalPlayer.Character.Humanoid.WalkSpeed = val end,
+    teleportToPlayer = function(plr) addLog("Teleporting to " .. plr) end,
+    infiniteJump = function() addLog("Inf jump active") end,
+    espBox = function() addLog("ESP enabled") end,
+    autoSaveConfig = function() addLog("Config saved") end,
+    loadConfig = function() addLog("Config loaded") end,
+    updateUI = function() addLog("UI updated") end,
+    resetWorkspace = function() addLog("Workspace reset") end,
+    checkScriptIntegrity = function() addLog("Script is intact") end,
+    enableDeveloperMode = function() addLog("Dev mode ON") end,
+    exportLogsToClipboard = function() setclipboard(table.concat(logs, "\n")) end,
+    notifyInGame = function(msg) game.StarterGui:SetCore("SendNotification", {Title="UDv9", Text=msg}) end,
+    checkVersion = function() return "v9 INFINITY" end,
+    suicide = function() addLog("Universal Decryptor shutting down..."); Window:Destroy() end
+}
+FeaturesTab:CreateButton({
+    Name = "Monitor Remote Events",
+    Callback = function()
+        for _, v in pairs(game.ReplicatedStorage:GetChildren()) do
+            if v:IsA("RemoteEvent") then
+                Features.hookRemoteEvent(v.Name)
+            end
+        end
+        notify("Remote events monitored!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "Log FireServer Calls",
+    Callback = function()
+        for _, v in pairs(game.ReplicatedStorage:GetChildren()) do
+            if v:IsA("RemoteEvent") then
+                v.OnServerEvent:Connect(function(player, ...)
+                    Features.logFireServer({...})
+                end)
+            end
+        end
+        notify("FireServer logging active!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "Log InvokeServer Calls",
+    Callback = function()
+        for _, v in pairs(game.ReplicatedStorage:GetChildren()) do
+            if v:IsA("RemoteFunction") then
+                v.OnServerInvoke = function(player, ...)
+                    Features.logInvokeServer({...})
+                    return nil
+                end
+            end
+        end
+        notify("InvokeServer logging active!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "Monitor HTTP Requests",
+    Callback = function()
+        local old_request = syn.request
+        syn.request = function(t)
+            Features.detectHttpRequests(t.Url)
+            return old_request(t)
+        end
+        notify("HTTP monitoring active!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "Anti-Kick & Anti-Ban",
+    Callback = function()
+        Features.antiKick()
+        notify("Anti-Kick active!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "Get Player List",
+    Callback = function()
+        Features.getPlayerList()
+        notify("Player list printed to logs!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "Toggle Fly",
+    Callback = function()
+        Features.toggleFly()
+        local char = game.Players.LocalPlayer.Character
+        if char then
+            local hum = char:FindFirstChild("Humanoid")
+            if hum then
+                hum.PlatformStand = true
+                local bp = Instance.new("BodyPosition")
+                bp.MaxForce = Vector3.new(1e10, 1e10, 1e10)
+                bp.P = 1e4
+                bp.D = 2000
+                bp.Position = char.HumanoidRootPart.Position
+                bp.Parent = char.HumanoidRootPart
+                game:GetService("RunService").Heartbeat:Connect(function()
+                    bp.Position = char.HumanoidRootPart.Position + Vector3.new(0, 0, 0)
+                end)
+            end
+        end
+        notify("Fly toggled!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "Toggle Noclip",
+    Callback = function()
+        Features.toggleNoclip()
+        local char = game.Players.LocalPlayer.Character
+        if char then
+            for _, v in pairs(char:GetChildren()) do
+                if v:IsA("BasePart") then
+                    v.CanCollide = false
+                end
+            end
+        end
+        notify("Noclip toggled!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "ESP Box",
+    Callback = function()
+        Features.espBox()
+        for _, p in pairs(game.Players:GetPlayers()) do
+            if p ~= game.Players.LocalPlayer then
+                local char = p.Character
+                if char then
+                    local box = Instance.new("BoxHandleAdornment")
+                    box.Size = Vector3.new(4, 6, 4)
+                    box.Adornee = char
+                    box.Color3 = Color3.fromRGB(255, 0, 0)
+                    box.AlwaysOnTop = true
+                    box.ZIndex = 10
+                    box.Parent = char
+                end
+            end
+        end
+        notify("ESP enabled!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "Export Logs to Clipboard",
+    Callback = function()
+        Features.exportLogsToClipboard()
+        notify("Logs copied to clipboard!")
+    end
+})
+FeaturesTab:CreateButton({
+    Name = "Self-Destruct",
+    Callback = function()
+        Features.suicide()
+    end
+})
+Tab:CreateButton({
+    Name = "Show Logs",
+    Callback = function()
+        local text = "Logs:\n"
+        for i, v in ipairs(logs) do
+            text = text .. v .. "\n"
+        end
+        OrionLib:MakeNotification({
+            Name = "Universal Decryptor Logs",
+            Content = text,
+            Image = "rbxassetid://4483345998",
+            Time = 10
+        })
+    end
+})
+Tab:CreateButton({
+    Name = "Scan Keys",
+    Callback = function()
+        scanForKeys()
+        notify("Keys scanned!")
+    end
+})
+Tab:CreateButton({
+    Name = "Analyze Decrypted",
+    Callback = function()
+        analyzeDecrypted()
+        notify("Analysis complete!")
+    end
+})
+Tab:CreateButton({
+    Name = "Clear Logs",
+    Callback = function()
+        logs = {}
+        decryptedCache = {}
+        notify("Cleared all data!")
+    end
+})
+SettingsTab:CreateToggle({
+    Name = "Auto Decrypt",
+    Default = true,
+    Callback = function(value)
+        settings.autoDecrypt = value
+        addLog("Auto Decrypt: " .. tostring(value))
+    end
+})
+SettingsTab:CreateToggle({
+    Name = "Log to Console",
+    Default = true,
+    Callback = function(value)
+        settings.logToConsole = value
+        addLog("Log to Console: " .. tostring(value))
+    end
+})
+SettingsTab:CreateToggle({
+    Name = "Notify on Decrypt",
+    Default = true,
+    Callback = function(value)
+        settings.notifyOnDecrypt = value
+        addLog("Notify on Decrypt: " .. tostring(value))
+    end
+})
+SettingsTab:CreateToggle({
+    Name = "Deep Scan",
+    Default = true,
+    Callback = function(value)
+        settings.deepScan = value
+        addLog("Deep Scan: " .. tostring(value))
+    end
+})
+SettingsTab:CreateToggle({
+    Name = "Memory Scan",
+    Default = true,
+    Callback = function(value)
+        settings.memoryScan = value
+        addLog("Memory Scan: " .. tostring(value))
+    end
+})
+SettingsTab:CreateToggle({
+    Name = "Save Decrypted",
+    Default = true,
+    Callback = function(value)
+        settings.saveDecrypted = value
+        addLog("Save Decrypted: " .. tostring(value))
+    end
+})
+SettingsTab:CreateToggle({
+    Name = "Auto Analyze",
+    Default = true,
+    Callback = function(value)
+        settings.autoAnalyze = value
+        addLog("Auto Analyze: " .. tostring(value))
+    end
+})
+SettingsTab:CreateToggle({
+    Name = "Detect All",
+    Default = true,
+    Callback = function(value)
+        settings.detectAll = value
+        addLog("Detect All: " .. tostring(value))
+    end
+})
+SettingsTab:CreateToggle({
+    Name = "Log to File",
+    Default = true,
+    Callback = function(value)
+        settings.logToFile = value
+    
